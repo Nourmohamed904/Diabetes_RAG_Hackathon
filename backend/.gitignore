@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+
+chroma_500_50/
+fastembed_cache/
+
+.ipynb_checkpoints/
+*.log
