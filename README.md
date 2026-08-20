@@ -4,12 +4,7 @@
 
 An evidence-grounded clinical RAG demonstration for adult Type 1 and Type 2 diabetes. The system retrieves from the approved NICE guideline corpus, answers only when retrieved evidence supports the answer, provides traceable citations, and safely abstains when evidence is insufficient or a request is patient-specific.
 
-## Latest updates
-
-- **Live deployment:** the React frontend is hosted on Vercel and sends clinical queries to the deployed FastAPI backend on Railway.
-- **Notebook-aligned retrieval:** the backend now uses the final notebook's live retrieval setting (`RETRIEVAL_SCORE_THRESHOLD=1.1`) rather than the stricter offline evaluation threshold of `0.23`. This prevents relevant retrieved passages from being discarded before the grounded model can assess them.
-- **Simplified evidence flow:** an additional pre-generation LLM sufficiency gate was removed. The grounded generation prompt, response schema validation, safety checks, and traceable-citation validation remain in place.
-- **Repository cleanup:** the final notebook is the source of truth; older experimental notebooks were removed, while automated backend safety and API tests were added.
+The deployed React frontend runs on Vercel and calls the deployed FastAPI/RAG backend on Railway.
 
 ## Approved sources
 
@@ -26,13 +21,20 @@ React frontend
   → FastAPI backend
   → ClinicalRAGPipeline
   → Chroma vector search over indexed NICE chunks
-  → retrieval diagnostics and grounded-answer checks
+  → retrieval diagnostics and grounded LLM assessment
   → Groq grounded generation
   → citation validation and exact-evidence traceability
   → React result view
 ```
 
 The backend starts expensive resources once: the FastEmbed embedding model, the persisted Chroma index, the Groq client, and the RAG pipeline. They are not recreated for every user question.
+
+## Deployment
+
+- **Frontend:** [Vercel live demo](https://diabetes-rag-hackathon.vercel.app/)
+- **Backend:** [Railway API health check](https://diabetesraghackathon-production.up.railway.app/health)
+
+For the deployed frontend, the Vercel environment variable `VITE_API_URL` points to the Railway backend. For local development, it points to `http://localhost:8000`.
 
 ## Repository layout
 
@@ -173,6 +175,7 @@ npm run build
 ## Development notes
 
 - The final notebook is the source of truth for RAG behavior. Do not modify it during backend runtime work.
-- The backend uses the final production selection: `chroma_500_50` with retrieval threshold `0.23`.
+- The backend uses the final production selection: `chroma_500_50` with a soft context-inclusion threshold of `1.1`. The earlier `0.23` value is retained only as an offline retrieval-evaluation reference; it must not reject live queries before the grounded model assesses the retrieved passages.
+- The RAG flow has no separate pre-generation LLM sufficiency gate. Safety classification, grounded generation instructions, response-schema validation, and exact-citation traceability still protect the user-facing result.
 - The Groq model and the FastEmbed model are configured in `backend/.env.example`.
-- The next phase is Dockerization, followed by container testing and deployment selection.
+- The repository keeps the final notebook and automated API, safety, adapter, and RAG smoke tests; older experimental notebooks were removed.
