@@ -1,13 +1,13 @@
 export default function QuestionInput({ question, onChange, onSubmit, loading }) {
   return (
     <form className="question-form" onSubmit={onSubmit}>
-      <label htmlFor="clinical-question">Clinical guideline question</label>
+      <label htmlFor="clinical-question">Clinical guideline question (not medicine or dose advice)</label>
       <div className="input-row">
         <textarea
           id="clinical-question"
           value={question}
           onChange={(event) => onChange(event.target.value)}
-          placeholder="Ask a question grounded in NICE diabetes guidance…"
+          placeholder="Ask about diabetes monitoring or targets; medicine and dose questions are safely declined…"
           rows="2"
           disabled={loading}
         />

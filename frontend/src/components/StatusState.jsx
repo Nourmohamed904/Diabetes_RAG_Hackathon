@@ -1,6 +1,6 @@
 const copy = {
   insufficient: { eyebrow: 'Intentional abstention', title: 'Insufficient guideline evidence', message: 'The indexed NICE diabetes guidelines did not provide enough evidence to answer this confidently.', note: 'No clinical answer was generated.' },
-  safety: { eyebrow: 'Safety boundary triggered', title: 'Patient-specific clinical decision', message: 'This assistant provides guideline evidence, not individual treatment or dosing decisions.', note: 'Please seek urgent advice from an appropriate healthcare professional.' },
+  safety: { eyebrow: 'Safety boundary triggered', title: 'Medicine or dose question', message: 'This assistant does not provide information or recommendations about medicines, medication, insulin, or doses.', note: 'Please consult a qualified healthcare professional.' },
   error: { eyebrow: 'Technical issue', title: 'We could not process this request', message: 'The evidence service is temporarily unavailable.', note: 'This is different from an evidence-based refusal. Please try again shortly.' }
 }
 

@@ -2,7 +2,7 @@
 
 [**Open the live demo → diabetes-rag-hackathon.vercel.app**](https://diabetes-rag-hackathon.vercel.app/)
 
-An evidence-grounded clinical RAG demonstration for adult Type 1 and Type 2 diabetes. The system retrieves from the approved NICE guideline corpus, answers only when retrieved evidence supports the answer, provides traceable citations, and safely abstains when evidence is insufficient or a request is patient-specific.
+An evidence-grounded clinical RAG demonstration for adult Type 1 and Type 2 diabetes. The system retrieves from the approved NICE guideline corpus, answers only when retrieved evidence supports the answer, provides traceable citations, and safely abstains when evidence is insufficient. Questions about medicines, medication, insulin, injections, or doses are always handled as a safety boundary and are not answered.
 
 The deployed React frontend runs on Vercel and calls the deployed FastAPI/RAG backend on Railway.
 
@@ -148,7 +148,7 @@ Supported response fields include a recommendation, confidence, claims, citation
 |---|---|---|
 | Supported guideline question | `supported` | Grounded answer with traceable evidence |
 | Insufficient or out-of-scope evidence | `insufficient` | Safe abstention with no citations |
-| Patient-specific dosing / high-risk request | `safety` | Safety refusal with no retrieval or citations |
+| Medicine, medication, insulin, injection, or dose question | `safety` | Safety refusal before retrieval, with no citations |
 | Technical RAG failure | HTTP `503` | Frontend technical-error state |
 
 The API never turns an intentional clinical refusal into a server error, and it does not display a citation unless it maps to an exact retrieved Chroma chunk.
@@ -176,6 +176,6 @@ npm run build
 
 - The final notebook is the source of truth for RAG behavior. Do not modify it during backend runtime work.
 - The backend uses the final production selection: `chroma_500_50` with a soft context-inclusion threshold of `1.1`. The earlier `0.23` value is retained only as an offline retrieval-evaluation reference; it must not reject live queries before the grounded model assesses the retrieved passages.
-- The RAG flow has no separate pre-generation LLM sufficiency gate. Safety classification, grounded generation instructions, response-schema validation, and exact-citation traceability still protect the user-facing result.
+- The RAG flow has no separate pre-generation LLM sufficiency gate. A deterministic medicine-and-dose classifier runs before retrieval, while grounded generation instructions, response-schema validation, and exact-citation traceability provide additional protection.
 - The Groq model and the FastEmbed model are configured in `backend/.env.example`.
 - The repository keeps the final notebook and automated API, safety, adapter, and RAG smoke tests; older experimental notebooks were removed.

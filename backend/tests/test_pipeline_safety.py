@@ -23,6 +23,20 @@ class ClinicalRAGPipelineSafetyTests(unittest.TestCase):
         self.assertEqual(result["retrieved_chunks_count"], 0)
         self.assertEqual(result["response"]["citations"], [])
 
+    def test_medicine_and_dose_questions_are_blocked_before_retrieval(self):
+        questions = [
+            "What medicine should I take for type 2 diabetes?",
+            "Should I take metformin?",
+            "What insulin regimen is recommended for adults with type 1 diabetes?",
+            "What dose should I use?",
+        ]
+        for question in questions:
+            with self.subTest(question=question):
+                result = self.pipeline.query(question)
+                self.assertEqual(result["risk_level"], "high_risk")
+                self.assertEqual(result["retrieved_chunks_count"], 0)
+                self.assertEqual(result["response"]["citations"], [])
+
     def test_out_of_scope_question_is_refused_without_citations(self):
         result = self.pipeline.query("What is the recommended screening interval for breast cancer?")
         self.assertEqual(result["risk_level"], "out_of_scope")
