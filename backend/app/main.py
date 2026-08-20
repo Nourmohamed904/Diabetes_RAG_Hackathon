@@ -53,6 +53,16 @@ def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
+@app.get("/version")
+def version() -> dict[str, str]:
+    """Reports the deployed commit so a stale Railway build can be diagnosed from the API itself."""
+    return {
+        "commit": os.getenv("RAILWAY_GIT_COMMIT_SHA", "unknown"),
+        "branch": os.getenv("RAILWAY_GIT_BRANCH", "unknown"),
+        "repo": os.getenv("RAILWAY_GIT_REPO_NAME", "unknown"),
+    }
+
+
 @app.post("/query", response_model=QueryResponse)
 def query_evidence(request: QueryRequest, http_request: Request) -> QueryResponse:
     question = request.question.strip()
