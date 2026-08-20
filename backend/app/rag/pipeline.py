@@ -4,10 +4,13 @@ This module intentionally excludes ingestion, indexing, and evaluation code.
 """
 
 import json
+import logging
 import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
+
+logger = logging.getLogger(__name__)
 
 REFUSAL_RECOMMENDATION = (
     "I couldn't find enough information in the indexed guidelines to answer this "
@@ -71,9 +74,11 @@ def validate_clinical_response(
 
 
 class ClinicalRAGPipeline:
-    """The final notebook's runtime query pipeline, independent of FastAPI."""
+    """The final notebook's runtime query pipeline (cell 57 / cell 74), independent of FastAPI."""
 
-    def __init__(self, vector_store: Any, llm: Any, chunk_config: str = "500_50", score_threshold: float = 0.23):
+    def __init__(self, vector_store: Any, llm: Any, chunk_config: str = "500_50", score_threshold: float = 1.1):
+        # Matches the notebook's live ClinicalRAGPipeline default (cell 57), not the
+        # offline-only CALIBRATED_THRESHOLD (0.23) used for Precision@K measurement in cell 89.
         self.vector_store = vector_store
         self.chunk_config = chunk_config
         self.llm = llm
@@ -108,6 +113,8 @@ class ClinicalRAGPipeline:
         return "\n\n".join(passages)
 
     def check_retrieval_confidence(self, retrieved_docs_with_scores: list[tuple[Any, float]]) -> dict[str, Any]:
+        """Diagnostic only — mirrors notebook cell 76. The notebook's live query() never calls
+        this before invoking the LLM, so it must not gate generation here either."""
         if not retrieved_docs_with_scores:
             return {"sufficient": False, "reason": "No evidence retrieved.", "valid_chunks": 0, "top_score": None}
         top_score = retrieved_docs_with_scores[0][1]
@@ -125,35 +132,6 @@ class ClinicalRAGPipeline:
             "valid_chunks": len(valid_chunks),
             "top_score": float(top_score),
         }
-
-    def check_evidence_sufficiency(self, question: str, retrieved_docs_with_scores: list[tuple[Any, float]]) -> dict[str, Any]:
-        if not retrieved_docs_with_scores:
-            return {"sufficient": False, "reason": "No evidence was retrieved."}
-        evidence_context = self._format_context_passages(retrieved_docs_with_scores)
-        prompt = f"""You are an evidence sufficiency checker for a clinical RAG system.
-
-Question:
-{question}
-
-Retrieved guideline passages:
-{evidence_context}
-
-Determine whether the retrieved passages contain enough explicit information to answer the question accurately WITHOUT using outside knowledge, guessing, or inference beyond what the passages state.
-
-Return ONLY valid JSON in exactly this format:
-{{"sufficient": true, "reason": "Brief explanation"}}
-
-Use "sufficient": false when the passages are related to the topic but do not actually contain enough information to answer the question.
-"""
-        try:
-            response = self.llm.invoke([
-                {"role": "system", "content": "You are a strict evidence sufficiency evaluator. Use only the supplied passages."},
-                {"role": "user", "content": prompt},
-            ])
-            parsed = self._parse_json(str(response.content).strip())
-            return {"sufficient": bool(parsed.get("sufficient", False)), "reason": str(parsed.get("reason", "Evidence sufficiency check completed."))}
-        except Exception as error:
-            return {"sufficient": False, "reason": f"Evidence sufficiency check failed: {error}"}
 
     @staticmethod
     def _parse_json(raw_output: str) -> dict[str, Any]:
@@ -201,7 +179,20 @@ Use "sufficient": false when the passages are related to the topic but do not ac
             })
         return evidence
 
-    def _result(self, question: str, response: dict[str, Any], *, is_schema_valid: bool, validation_message: str, was_repaired: bool, retrieved_chunks_count: int, retrieval_confidence: dict[str, Any], evidence_sufficiency: dict[str, Any], risk_level: str, retrieved_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    @staticmethod
+    def _log_retrieval(question: str, top_k: int, retrieved: list[tuple[Any, float]], valid: list[tuple[Any, float]]) -> None:
+        """Stage-by-stage trace: lets you tell Retrieval vs Filtering vs Generation apart."""
+        kept_ids = {id(doc) for doc, _ in valid}
+        logger.debug("RAG query=%r top_k=%d retrieved=%d kept=%d", question, top_k, len(retrieved), len(valid))
+        for rank, (document, score) in enumerate(retrieved, 1):
+            metadata = document.metadata
+            logger.debug(
+                "  [%d] score=%.4f kept=%s doc=%s page=%s chunk_id=%s",
+                rank, score, id(document) in kept_ids,
+                metadata.get("document"), metadata.get("page"), metadata.get("chunk_id"),
+            )
+
+    def _result(self, question: str, response: dict[str, Any], *, is_schema_valid: bool, validation_message: str, was_repaired: bool, retrieved_chunks_count: int, retrieval_confidence: dict[str, Any], risk_level: str, retrieved_evidence: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         return {
             "question": question,
             "is_schema_valid": is_schema_valid,
@@ -210,7 +201,6 @@ Use "sufficient": false when the passages are related to the topic but do not ac
             "was_repaired": was_repaired,
             "retrieved_chunks_count": retrieved_chunks_count,
             "retrieval_confidence": retrieval_confidence,
-            "evidence_sufficiency": evidence_sufficiency,
             "retrieved_evidence": retrieved_evidence or [],
             "risk_level": risk_level,
             "disclaimer": CLINICAL_SAFETY_DISCLAIMER,
@@ -225,7 +215,6 @@ Use "sufficient": false when the passages are related to the topic but do not ac
         evidence: str = "",
         retrieved_chunks_count: int = 0,
         retrieval_confidence: dict[str, Any] | None = None,
-        evidence_sufficiency: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         recommendation = (
             "I can't provide personalized medical instructions, such as individual medication or insulin dosing. Please consult a qualified healthcare professional."
@@ -237,7 +226,7 @@ Use "sufficient": false when the passages are related to the topic but do not ac
             question, response, is_schema_valid=valid, validation_message=message, was_repaired=False,
             retrieved_chunks_count=retrieved_chunks_count,
             retrieval_confidence=retrieval_confidence or {"sufficient": False, "reason": reason, "valid_chunks": 0, "top_score": None},
-            evidence_sufficiency=evidence_sufficiency or {"sufficient": False, "reason": reason}, risk_level=risk_level,
+            risk_level=risk_level,
         )
 
     def query(self, user_question: str, top_k: int = 5) -> dict[str, Any]:
@@ -248,26 +237,9 @@ Use "sufficient": false when the passages are related to the topic but do not ac
             return self._refusal(user_question, risk_level, "Question is outside the system scope.")
 
         retrieved_results = self.vector_store.similarity_search_with_score(user_question, k=top_k)
-        retrieval_check = self.check_retrieval_confidence(retrieved_results)
+        retrieval_check = self.check_retrieval_confidence(retrieved_results)  # diagnostics only, does not gate
         valid_results = [item for item in retrieved_results if item[1] <= self.score_threshold]
-        if not retrieval_check["sufficient"]:
-            return self._refusal(
-                user_question, risk_level, retrieval_check["reason"],
-                evidence="No sufficiently relevant evidence retrieved.",
-                retrieval_confidence=retrieval_check,
-                evidence_sufficiency={
-                    "sufficient": False,
-                    "reason": "Evidence sufficiency check skipped because no chunk passed the retrieval threshold.",
-                },
-            )
-
-        evidence_check = self.check_evidence_sufficiency(user_question, valid_results)
-        if not evidence_check["sufficient"]:
-            return self._refusal(
-                user_question, risk_level, evidence_check["reason"], evidence=evidence_check["reason"],
-                retrieved_chunks_count=len(valid_results), retrieval_confidence=retrieval_check,
-                evidence_sufficiency=evidence_check,
-            )
+        self._log_retrieval(user_question, top_k, retrieved_results, valid_results)
 
         context = self._format_context_passages(valid_results)
         response = self.llm.invoke([
@@ -289,6 +261,6 @@ Use "sufficient": false when the passages are related to the topic but do not ac
         return self._result(
             user_question, raw_json, is_schema_valid=is_valid, validation_message=validation_message,
             was_repaired=was_repaired, retrieved_chunks_count=len(valid_results),
-            retrieval_confidence=retrieval_check, evidence_sufficiency=evidence_check, risk_level=risk_level,
+            retrieval_confidence=retrieval_check, risk_level=risk_level,
             retrieved_evidence=self._retrieved_evidence(valid_results),
         )

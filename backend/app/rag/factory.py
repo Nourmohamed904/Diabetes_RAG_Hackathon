@@ -58,5 +58,5 @@ def create_pipeline() -> ClinicalRAGPipeline:
         vector_store=vector_store,
         chunk_config="500_50",
         llm=llm,
-        score_threshold=float(os.getenv("RETRIEVAL_SCORE_THRESHOLD", "0.23")),
+        score_threshold=float(os.getenv("RETRIEVAL_SCORE_THRESHOLD", "1.1")),
     )
