@@ -1,6 +1,15 @@
 # NICE Diabetes Evidence Assistant
 
+[**Open the live demo → diabetes-rag-hackathon.vercel.app**](https://diabetes-rag-hackathon.vercel.app/)
+
 An evidence-grounded clinical RAG demonstration for adult Type 1 and Type 2 diabetes. The system retrieves from the approved NICE guideline corpus, answers only when retrieved evidence supports the answer, provides traceable citations, and safely abstains when evidence is insufficient or a request is patient-specific.
+
+## Latest updates
+
+- **Live deployment:** the React frontend is hosted on Vercel and sends clinical queries to the deployed FastAPI backend on Railway.
+- **Notebook-aligned retrieval:** the backend now uses the final notebook's live retrieval setting (`RETRIEVAL_SCORE_THRESHOLD=1.1`) rather than the stricter offline evaluation threshold of `0.23`. This prevents relevant retrieved passages from being discarded before the grounded model can assess them.
+- **Simplified evidence flow:** an additional pre-generation LLM sufficiency gate was removed. The grounded generation prompt, response schema validation, safety checks, and traceable-citation validation remain in place.
+- **Repository cleanup:** the final notebook is the source of truth; older experimental notebooks were removed, while automated backend safety and API tests were added.
 
 ## Approved sources
 
@@ -17,7 +26,7 @@ React frontend
   → FastAPI backend
   → ClinicalRAGPipeline
   → Chroma vector search over indexed NICE chunks
-  → retrieval and evidence-sufficiency checks
+  → retrieval diagnostics and grounded-answer checks
   → Groq grounded generation
   → citation validation and exact-evidence traceability
   → React result view
